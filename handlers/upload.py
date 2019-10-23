@@ -3,7 +3,7 @@ from copy import deepcopy
 from datetime import datetime
 from base_handler import BaseHandler
 from data_templates import output
-from publics import consts, create_md5
+from publics import consts, create_md5, PrintException
 
 
 class Upload(BaseHandler):
@@ -11,7 +11,6 @@ class Upload(BaseHandler):
         self.tokenless = True
 
     def post(self, *args, **kwargs):
-        # self.Print('Start Upload...', Colors.YELLOW)
         data = deepcopy(output)
         try:
             file_contents = self.request.files['image'][0]['body']
@@ -28,15 +27,15 @@ class Upload(BaseHandler):
                 if not os.path.exists(consts.PDP_IMAGES + type + '/' + str(datetime.today().date())):
                     os.mkdir(consts.PDP_IMAGES + type + '/' + str(datetime.today().date()))
                 filename = create_md5(str(datetime.now()) + file_name) + file_ext
-                file = open('%s/%s/%s' % (consts.PDP_IMAGES + type, datetime.today().date() , filename), 'wb')
+                file = open('%s/%s/%s' % (consts.PDP_IMAGES + type, datetime.today().date(), filename), 'wb')
                 file.write(file_contents)
                 file.close()
                 self.set_output('public_operations', 'successful')
                 data['data']['item'] = {'link': '%s/%s/%s' % (consts.ODP_IMAGES + type, datetime.today().date(), filename)}
-                print data['data']['item']
+                print(data['data']['item'])
             else:
                 self.set_output('field_error', 'file_type')
         except Exception:
             self.set_output('public_operations', 'failed')
-            self.PrintException()
+            PrintException()
         self.write(data)

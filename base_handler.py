@@ -18,7 +18,11 @@ KM2: change log :
 16- Http output has been set as an standard output
 17- Print exception added here
 18- Put can be done based on conditions
-19-fixed Tokenless bug in put
+19- fixed Tokenless bug in put
+20- after_load_params added
+21- set_output returns error if message not found
+22- Delete uses allow_action
+23- Logical delete added
 '''
 import inspect
 import json
@@ -55,10 +59,11 @@ class BaseHandler(RequestHandler):
         self.note_id = ''     # Only usable in test mode
         self.log = []
         self.module = None
+        self.logical_delete = False
         self.allow_action = True
         self.url = ''
         self.token = None
-        self.locale = 'fa'
+        self.locale = 'en'
         self.method = ''
         self.app_version = 0
         self.document_count = 0
@@ -93,12 +98,9 @@ class BaseHandler(RequestHandler):
         self.set_status(204)
         self.finish()
 
-
     def set_output(self, group, id, data=None):
         try:
-            # TODO: It should be deleted
             self.status = consts.MESSAGES[group][id]['status']
-            # TODO: It should be deleted
             self.set_status(consts.MESSAGES[group][id]['code'])
             self.note = consts.MESSAGES[group][id][self.locale]
             if consts.TEST_MODE:
@@ -114,6 +116,9 @@ class BaseHandler(RequestHandler):
                     'note': self.note,
                 })
         except:
+            self.status = False
+            self.set_status(401)
+            self.note = 'Server message not found: %s/%s' % (group, id)
             self.PrintException()
 
     def kmwrite(self):
@@ -197,6 +202,7 @@ class BaseHandler(RequestHandler):
                 else:
                     col_users_roles = db()['users_roles']
                     user_role_info = col_users_roles.find_one({'name': user_info['role'], 'module': self.module})
+                    print('user_role %s module %s' % (self.user_role, self.module))
                     if user_role_info is None:
                         self.set_output('user', 'access_denied')
                     else:
@@ -265,12 +271,16 @@ class BaseHandler(RequestHandler):
                 self.inputs['delete'].extend(['id', 'conditions'])
             else:
                 self.inputs['delete'] = ['id', 'conditions']
-            self.set_output('user', 'params_loaded')
+            self.set_output('public_operations', 'params_loaded')
             # self.Print(self.params)
         except:
             self.PrintException()
             self.set_output('public_operations', 'params_not_loaded')
             return False
+        self.after_load_params()
+        return True
+
+    def after_load_params(self):
         return True
 
     def get_validation_check(self):
@@ -377,7 +387,7 @@ class BaseHandler(RequestHandler):
                                         id_list.append(ObjectId(item))
                                     self.conditions['_id'] = {'$in': id_list}
                                     del self.conditions['id_list']
-                                for k, v in self.conditions.iteritems():
+                                for k, v in self.conditions.items():
                                     if k in self.multilingual:
                                         self.conditions[k + '.' + self.locale] = self.conditions[k]
                                         del self.conditions[k]
@@ -425,7 +435,7 @@ class BaseHandler(RequestHandler):
             if '_id' in document:
                 document['id'] = str(document['_id'])
                 del document['_id']
-            for k, v in document.iteritems():
+            for k, v in document.items():
                 if 'dates' in self.casting:
                     if k in self.casting['dates']:
                         document[k] = str(v)
@@ -461,7 +471,7 @@ class BaseHandler(RequestHandler):
                 # TODO: Remove this code after some time, only for null values sent by retards
                 if self.allow_action:
                     has_null = False
-                    for k, v in self.params.iteritems():
+                    for k, v in self.params.items():
                         if v in [None, 'null']:
                             self.set_output('field_error', 'null')
                             has_null = True
@@ -483,7 +493,7 @@ class BaseHandler(RequestHandler):
                                         results = col.find(self.conditions, fields_dic).skip((self.params['page'] - 1) * self.params['page_size']).limit(self.params['page_size'])
                                 else:
                                     sort_conditions = []
-                                    for k, v in self.sort.iteritems():
+                                    for k, v in self.sort.items():
                                         sort_conditions.append((k, v))
                                     if fields_dic == {}:
                                         results = col.find(self.conditions).skip((self.params['page'] - 1) * self.params['page_size'])\
@@ -556,7 +566,7 @@ class BaseHandler(RequestHandler):
                     # TODO: Remove this code after some time, only for null values sent by retards
                     validated = True
                     new_params = deepcopy(self.params)
-                    for k, v in self.params.iteritems():
+                    for k, v in self.params.items():
                         if v in [None, 'null']:
                             self.set_output('field_error', 'null')
                             validated = False
@@ -618,11 +628,10 @@ class BaseHandler(RequestHandler):
                 # TODO: Remove this code after some time, only for null values sent by retards
                 if self.allow_action:
                     has_null = False
-                    for k, v in self.params.iteritems():
+                    for k, v in self.params.items():
                         if v in [None, 'null']:
                             self.set_output('field_error', 'null')
                             has_null = True
-                            # break
                         if k in self.multilingual:
                             self.params[k + '.' + self.locale] = v
                             del self.params[k]
@@ -703,21 +712,32 @@ class BaseHandler(RequestHandler):
             self.method = 'delete'
             self.module = self.request.uri.split('/')[2].split('?')[0]
             if self.pre_delete():
-                col = db()[self.module]
-                if self.conditions == {}:
-                    self.conditions = {'_id': ObjectId(self.params['id'])}
-                results = col.remove(self.conditions)
-                if results['n'] == 1:
-                    self.set_output('public_operations', 'successful')
+                if self.allow_action:
+                    col = db()[self.module]
+                    if self.logical_delete:
+                        results = col.update_one({'_id': ObjectId(self.params['id'])},
+                                                     {'$set': {'deleted': True}}).raw_result
+                        if results['nModified'] == 1:
+                            self.set_output('public_operations', 'successful')
+                        else:
+                            self.set_output('public_operations', 'record_not_found')
+                    else:
+                        if self.conditions == {}:
+                            self.conditions = {'_id': ObjectId(self.params['id'])}
+                        results = col.remove(self.conditions)
+                        if results['n'] == 1:
+                            self.set_output('public_operations', 'successful')
+                        else:
+                            self.set_output('public_operations', 'record_not_found')
                     self.after_delete()
-                else:
-                    self.set_output('public_operations', 'record_not_found')
             if consts.LOG_ACTIVE:
                 self.log_status(self.output)
         except:
             self.PrintException()
             self.set_output('public_operations', 'failed')
         self.kmwrite()
+
+
 
     def after_delete(self):
         return True
