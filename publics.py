@@ -139,14 +139,3 @@ def log_status(l):
     del l['date']
     l['date'] = datetime.now()
     col.insert(l)
-
-
-def prepare_item(item):
-
-    if '_id' in item:
-        item['id'] = str(item['_id'])
-        del item['_id']
-        for k, v in item.iteritems():
-            if 'date' in k:
-                item[k] = str(v)
-    return item
