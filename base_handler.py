@@ -449,6 +449,28 @@ class BaseHandler(RequestHandler):
             self.PrintException()
         return document
 
+    def prepare_list(self, dataset):
+        try:
+            data_list = []
+            for document in dataset:
+                if '_id' in document:
+                    document['id'] = str(document['_id'])
+                    del document['_id']
+                for k, v in document.items():
+                    if 'dates' in self.casting:
+                        if k in self.casting['dates']:
+                            document[k] = str(v)
+                    if 'multilingual' != []:
+                        if k in self.multilingual:
+                            if self.locale in document[k]:
+                                document[k] = document[k][self.locale]
+                            else:
+                                document[k] = consts.MESSAGES['field_error']['language_not_defined'][self.locale]
+                data_list.append(document)
+        except:
+            self.PrintException()
+        return data_list
+
     def after_get(self, dataset):
         self.Print('%s fired' % inspect.stack()[0][3], Colors.GRAY)
         temp = []
