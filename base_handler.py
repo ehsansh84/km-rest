@@ -1,5 +1,5 @@
 '''
-KM2: change log :
+Since KM2: change log :
 1- add allow_action to prevent action in some conditions
 2- self.output created to access through all methods
 3- some edit in after_get and after_get_one for dates
@@ -23,6 +23,10 @@ KM2: change log :
 21- set_output returns error if message not found
 22- Delete uses allow_action
 23- Logical delete added
+24- prepare_dataset added
+25- Python 3
+26- .success and .fail added
+27- not token is guest now
 '''
 import inspect
 import json
@@ -31,7 +35,10 @@ from datetime import datetime, timedelta
 from bson import ObjectId
 from tornado.web import RequestHandler
 from data_templates import output, log_template
-from publics import consts, db, decode_token
+from publics import db, decode_token
+from consts import consts
+# from json import dumps
+from bson.json_util import dumps
 
 
 def __enum(**named_values):
@@ -63,7 +70,7 @@ class BaseHandler(RequestHandler):
         self.allow_action = True
         self.url = ''
         self.token = None
-        self.locale = 'en'
+        self.locale = 'fa'
         self.method = ''
         self.app_version = 0
         self.document_count = 0
@@ -103,9 +110,10 @@ class BaseHandler(RequestHandler):
             self.status = consts.MESSAGES[group][id]['status']
             self.set_status(consts.MESSAGES[group][id]['code'])
             self.note = consts.MESSAGES[group][id][self.locale]
-            if consts.TEST_MODE:
-                self.note_group = group
-                self.note_id = id
+            self.status_code = consts.MESSAGES[group][id]['code']
+            # if consts.TEST_MODE:
+            #     self.note_group = group
+            #     self.note_id = id
             if data is not None:
                 self.note = self.note % data.encode('UTF-8')
 
@@ -123,52 +131,76 @@ class BaseHandler(RequestHandler):
 
     def kmwrite(self):
         self.output.update({'note': self.note})
-        if consts.TEST_MODE:
-            self.output.update({'note_group': self.note_group, 'note_id': self.note_id})
+        # if consts.TEST_MODE:
+        #     self.output.update({'note_group': self.note_group, 'note_id': self.note_id})
         self.Print(self.note, Colors.LIME)
         try:
+            # print(self.output)
             self.write(self.output)
+            if consts.LOG_ACTIVE:
+                self.log_status()
         except:
             self.write('An error occured when trying to write data into output: %s' % self.PrintException())
+            self.write('<hr/>')
+            self.write(str(self.output))
 
-    def log_status(self, data):
-        self.Print('%s fired' % inspect.stack()[0][3], Colors.GRAY)
+    def success(self):
+        self.set_output('public_operations', 'successful')
+
+    def fail(self):
+        self.set_output('public_operations', 'failed')
+
+    # def log_status(self, data):
+    def log_status(self):
         col = db()['logs']
         log = deepcopy(log_template)
-        # col.da
         doc = deepcopy(self.params)
         for item in self.casting['dates']:
             if item in doc.keys():
                 doc[item] = str(doc[item])
+                print('X-Real-ip')
+                print()
+                print(self.request.remote_ip)
+
         log.update({
             'project': 'miz',
-            'ip': self.request.remote_ip,
+            'ip': self.request.headers['X-Real-IP'] if 'X-Real-IP' in self.request.headers else self.request.remote_ip,
             'duration': (datetime.now() - self.start_time).total_seconds() * 1000,
             'date': datetime.now(),
+            'date_only': str(datetime.now().date()),
+            'module': self.module,
+            'module_id': self.id,
             'token': self.token,
             'user_id': self.user_id,
             'doc': doc,
             'original_params': self.original_params,
             'status': self.status,
             'http_code': self.status_code,
-            'output': data,
+            'output': self.output,
             'method': self.method,
             'url': self.request.uri,
         })
         try:
-            col.insert(log)
+            col.insert(log, check_keys=False)
+
+            # channel = qcon().channel()
+            # channel.queue_declare(queue='logs')
+            # channel.basic_publish(exchange='', routing_key='logs', body=dumps(log))
+            # channel.close()
+
         except:
             self.PrintException()
 
     def init_method(self):
-        self.Print('%s fired' % inspect.stack()[0][3], Colors.GRAY)
+        pass
 
     def token_validation(self):
-        self.Print('%s fired' % inspect.stack()[0][3], Colors.GRAY)
         try:
             if self.token is None:
-                self.set_output('user', 'token_not_received')
+                self.user_id = '5dbfb57dbbe873941f0ac431'
+                # self.set_output('user', 'token_not_received')
             else:
+                print(self.token)
                 token_info = decode_token(self.token)
                 if token_info is None:
                     self.set_output('user', 'wrong_token')
@@ -188,7 +220,6 @@ class BaseHandler(RequestHandler):
         return self.status
 
     def load_permissions(self):
-        self.Print('%s fired' % inspect.stack()[0][3], Colors.GRAY)
         try:
             col_users = db()['users']
             user_info = col_users.find_one({'_id': ObjectId(self.user_id)})
@@ -217,11 +248,11 @@ class BaseHandler(RequestHandler):
                         self.permissions = json.loads(temp)
         except:
             self.PrintException()
-            self.set_output('public_operations', 'failed')
+            # self.set_output('public_operations', 'failed')
+            self.fail()
         return self.status
 
     def method_access_control(self):
-        self.Print('%s fired' % inspect.stack()[0][3], Colors.GRAY)
         if self.permissions is None:
             self.set_output('user', 'permission_not_defined')
         else:
@@ -234,7 +265,6 @@ class BaseHandler(RequestHandler):
         return self.status
 
     def load_params(self):
-        self.Print('%s fired' % inspect.stack()[0][3], Colors.GRAY)
         try:
             if self.method == '':
                 self.set_output('user', 'method_not_specified')
@@ -256,11 +286,9 @@ class BaseHandler(RequestHandler):
             if 'token' in self.params:
                 self.token = self.params['token']
                 del self.params['token']
-
             if 'get' in self.inputs:
                 self.inputs['get'].extend(['page', 'page_size', 'conditions'])
             else:
-                # self.Print(self.inputs)
                 self.inputs['get'] = ['page', 'page_size', 'conditions']
             if 'put' in self.inputs:
                 self.inputs['put'].append('id')
@@ -272,7 +300,6 @@ class BaseHandler(RequestHandler):
             else:
                 self.inputs['delete'] = ['id', 'conditions']
             self.set_output('public_operations', 'params_loaded')
-            # self.Print(self.params)
         except:
             self.PrintException()
             self.set_output('public_operations', 'params_not_loaded')
@@ -284,7 +311,6 @@ class BaseHandler(RequestHandler):
         return True
 
     def get_validation_check(self):
-        self.Print('%s fired' % inspect.stack()[0][3], Colors.GRAY)
         try:
             if 'get' in self.required:
                 for item in self.required[self.method]:
@@ -297,7 +323,6 @@ class BaseHandler(RequestHandler):
         return True
 
     def post_validation_check(self):
-        self.Print('%s fired' % inspect.stack()[0][3], Colors.GRAY)
         try:
             if 'post' in self.required:
                 for item in self.required[self.method]:
@@ -310,7 +335,6 @@ class BaseHandler(RequestHandler):
         return True
 
     def put_validation_check(self):
-        self.Print('%s fired' % inspect.stack()[0][3], Colors.GRAY)
         try:
             if 'put' in self.required:
                 for item in self.required[self.method]:
@@ -323,16 +347,13 @@ class BaseHandler(RequestHandler):
         return True
 
     def delete_validation_check(self):
-        self.Print('%s fired' % inspect.stack()[0][3], Colors.GRAY)
         if not 'id' in self.params.keys():
             self.set_output('field_error', 'delete_id')
             return False
         return True
 
     def data_casting(self):
-        self.Print('%s fired' % inspect.stack()[0][3], Colors.GRAY)
         try:
-            # self.Print(self.method)
             self.casting['ints'].extend(['page', 'page_size'])
             self.casting['dics'].extend(['conditions'])
             self.casting['lists'].extend(['fields'])
@@ -341,6 +362,8 @@ class BaseHandler(RequestHandler):
                 pass
             for item in self.params.keys():
                 if item in self.casting['ints']:
+                    # print(item)
+                    # print(self.params[item])
                     self.params[item] = int(self.params[item])
                 elif item in self.casting['dics']:
                     if self.method == 'get':
@@ -354,7 +377,6 @@ class BaseHandler(RequestHandler):
         return True
 
     def get_init(self):
-        self.Print('%s fired' % inspect.stack()[0][3], Colors.GRAY)
         if 'page' not in self.params: self.params['page'] = 1
         if 'page_size' not in self.params: self.params['page_size'] = consts.page_size
         if 'sort' not in self.params: self.params['sort'] = {}
@@ -366,42 +388,58 @@ class BaseHandler(RequestHandler):
         return True
 
     def pre_get(self):
-        self.Print('%s fired' % inspect.stack()[0][3], Colors.GRAY)
         try:
+            print('self.module')
+            print(self.module)
+            print(self.request.uri)
+
             if self.module is None:
                 self.module = self.request.uri.split('/')[2].split('?')[0]
             self.init_method()
             if self.load_params():
-                if not self.tokenless:
-                    if self.token_validation():
-                        if self.load_permissions():
-                            self.method_access_control()
+                # if not self.tokenless:
+                #     if self.token_validation():
+                #         if self.load_permissions():
+                #             self.method_access_control()
+                if self.token_validation():
+                    if self.load_permissions():
+                        self.method_access_control()
                 if self.status:
                     if self.get_validation_check():
                         if self.data_casting():
                             if 'conditions' in self.params:
                                 self.conditions = self.params['conditions']
+                                conditions = {}
                                 if 'id_list' in self.conditions.keys():
                                     id_list = []
+                                    # print('ID LIST')
+                                    # print(self.conditions)
                                     for item in self.conditions['id_list']:
                                         id_list.append(ObjectId(item))
-                                    self.conditions['_id'] = {'$in': id_list}
+                                    conditions['_id'] = {'$in': id_list}
                                     del self.conditions['id_list']
                                 for k, v in self.conditions.items():
                                     if k in self.multilingual:
-                                        self.conditions[k + '.' + self.locale] = self.conditions[k]
-                                        del self.conditions[k]
+                                        # self.conditions[k + '.' + self.locale] = self.conditions[k]
+                                        conditions[k + '.' + self.locale] = self.conditions[k]
+                                        # del self.conditions[k]
+                                    else:
+                                        conditions[k] = v
+                                self.conditions = conditions
+                                # print('self.conditions')
+                                import json
+                                # print(self.conditions)
                                 del self.params['conditions']
                             if not self.tokenless:
                                 self.add_user_data()
                             return self.before_get()
         except:
             self.PrintException()
-            self.set_output('public_operations', 'failed')
+            # self.set_output('public_operations', 'failed')
+            self.fail()
         return False
 
     def set_default_values(self):
-        self.Print('%s fired' % inspect.stack()[0][3], Colors.GRAY)
         for item in self.casting['defaults'].keys():
             try:
                 if item not in self.params:
@@ -410,7 +448,6 @@ class BaseHandler(RequestHandler):
                 self.PrintException()
 
     def add_user_data(self):
-        self.Print('%s fired' % inspect.stack()[0][3], Colors.GRAY)
         try:
             if self.method in ['get']:
                 self.conditions.update(self.permissions[self.method])
@@ -423,9 +460,15 @@ class BaseHandler(RequestHandler):
             elif self.method == 'delete':
                 self.params.update(self.permissions[self.method])
             elif self.method == 'put':
+                temp_params = {}
+                # print(self.params.keys())
                 for item in self.params.keys():
-                    if item in self.auto_fields:
-                        del self.params[item]
+                    # print('======================')
+                    # print(item)
+                    if item not in self.auto_fields:
+                        temp_params[item] = self.params[item]
+                        # del self.params[item]
+                self.params = temp_params
                 self.params.update(self.permissions[self.method]['set'])
         except:
             self.PrintException()
@@ -449,9 +492,9 @@ class BaseHandler(RequestHandler):
             self.PrintException()
         return document
 
-    def prepare_list(self, dataset):
+    def prepare_dataset(self, dataset):
+        data_list = []
         try:
-            data_list = []
             for document in dataset:
                 if '_id' in document:
                     document['id'] = str(document['_id'])
@@ -472,7 +515,6 @@ class BaseHandler(RequestHandler):
         return data_list
 
     def after_get(self, dataset):
-        self.Print('%s fired' % inspect.stack()[0][3], Colors.GRAY)
         temp = []
         try:
             for item in dataset:
@@ -482,13 +524,12 @@ class BaseHandler(RequestHandler):
         return temp
 
     def after_get_one(self, document):
-        self.Print('%s fired' % inspect.stack()[0][3], Colors.GRAY)
         return self.prepare_item(document)
 
     def get(self, id=None, *args, **kwargs):
-        self.Print('%s fired' % inspect.stack()[0][3], Colors.GRAY)
         try:
             self.method = 'get'
+            self.id = id
             if self.pre_get():
                 # TODO: Remove this code after some time, only for null values sent by retards
                 if self.allow_action:
@@ -524,14 +565,24 @@ class BaseHandler(RequestHandler):
                                         results = col.find(self.conditions, fields_dic).skip((self.params['page'] - 1) * self.params['page_size'])\
                                             .limit(self.params['page_size']).sort(sort_conditions)
                                 self.document_count = results.count()
+                                # print('results.count()')
+                                # print(results.count())
+                                # print(self.module)
+                                # print(col.name)
+                                # print(self.fields)
+                                # for item in results:
+                                #     print(item)
+
                                 results = self.after_get(results)
                                 self.output['data']['count'] = self.document_count
                                 self.output['data']['list'] = results
-                                self.set_output('public_operations', 'successful')
+                                # self.set_output('public_operations', 'successful')
+                                self.success()
                         else:
                             try:
                                 # TODO: Shit happend, I should do something for this
                                 object_id = ObjectId(id) if self.module != 'achievements' else id
+                                # self.id = id
                                 if fields_dic == {}:
                                     results = col.find_one({'_id': object_id})
                                 else:
@@ -541,19 +592,18 @@ class BaseHandler(RequestHandler):
                                 else:
                                     self.output['data']['item'] = self.after_get_one(results)
                                     self.output['count'] = 1
-                                    self.set_output('public_operations', 'successful')
+                                    # self.set_output('public_operations', 'successful')
+                                    self.success()
                             except:
                                 self.PrintException()
                                 self.set_output('field_error', 'id_format')
         except:
             self.PrintException()
-            self.set_output('public_operations', 'failed')
-        if consts.LOG_ACTIVE:
-            self.log_status(self.output)
+            # self.set_output('public_operations', 'failed')
+            self.fail()
         self.kmwrite()
 
     def pre_post(self):
-        self.Print('%s fired' % inspect.stack()[0][3], Colors.BLUE)
         try:
             self.module = self.request.uri.split('/')[2].split('?')[0]
             self.init_method()
@@ -580,7 +630,6 @@ class BaseHandler(RequestHandler):
         return True
 
     def post(self, *args, **kwargs):
-        self.Print('%s fired' % inspect.stack()[0][3], Colors.GRAY)
         try:
             self.method = 'post'
             if self.pre_post():
@@ -605,21 +654,19 @@ class BaseHandler(RequestHandler):
                         id = str(col.insert(self.params))
                         self.id = id
                         self.output['data']['item']['id'] = id
-                        self.set_output('public_operations', 'successful')
+                        # self.set_output('public_operations', 'successful')
+                        self.success()
                     self.after_post()
-
-            if consts.LOG_ACTIVE:
-                self.log_status(self.output)
         except:
             self.PrintException()
-            self.set_output('public_operations', 'failed')
+            # self.set_output('public_operations', 'failed')
+            self.fail()
         self.kmwrite()
 
     def after_post(self):
         return True
 
     def pre_put(self):
-        self.Print('%s fired' % inspect.stack()[0][3], Colors.GRAY)
         try:
             self.module = self.request.uri.split('/')[2].split('?')[0]
             self.init_method()
@@ -642,7 +689,6 @@ class BaseHandler(RequestHandler):
         return True
 
     def put(self, *args, **kwargs):
-        self.Print('%s fired' % inspect.stack()[0][3], Colors.GRAY)
         try:
             self.method = 'put'
             self.module = self.request.uri.split('/')[2].split('?')[0]
@@ -650,19 +696,27 @@ class BaseHandler(RequestHandler):
                 # TODO: Remove this code after some time, only for null values sent by retards
                 if self.allow_action:
                     has_null = False
+                    # print(len(self.params.items()))
+                    params = {}
                     for k, v in self.params.items():
+                        # print(k)
                         if v in [None, 'null']:
                             self.set_output('field_error', 'null')
                             has_null = True
+                            break
                         if k in self.multilingual:
-                            self.params[k + '.' + self.locale] = v
-                            del self.params[k]
+                            params[k + '.' + self.locale] = v
+                            # self.params[k + '.' + self.locale] = v
+                            # del self.params[k]
+                        else:
+                            params[k] = v
+                        self.params = params
 
                     for k, v in self.conditions.items():
                         if v in [None, 'null']:
                             self.set_output('field_error', 'null')
                             has_null = True
-                            break
+                            # break
                     if not has_null:
                         if 'create_date' in self.params: del self.params['create_date']
                         self.params['last_update'] = datetime.now()
@@ -682,23 +736,28 @@ class BaseHandler(RequestHandler):
                         if not self.tokenless:
                             if 'put' in self.permissions:
                                 query.update(self.permissions['put']['query'])
+                        # print('query')
+                        # print(query)
+                        # print({'$set': self.params})
                         results = col.update_one(query, {'$set': self.params}).raw_result
+                        # print(results)
+                        # print(col.name)
 
                         if self.conditions == {}:
                             self.params['id'] = id
                         if results['nModified'] > 0:
-                            self.set_output('public_operations', 'successful')
+                            # self.set_output('public_operations', 'successful')
+                            self.success()
                         elif results['updatedExisting']:
-                            self.set_output('public_operations', 'update_failed')
+                            # self.set_output('public_operations', 'update_failed')
+                            self.fail()
                         else:
                             self.set_output('public_operations', 'record_not_found')
-            if consts.LOG_ACTIVE:
-                self.log_status(self.output)
             self.after_put()
         except:
             self.PrintException()
-            self.set_output('public_operations', 'failed')
-            self.Print(self.note, Colors.RED)
+            # self.set_output('public_operations', 'failed')
+            self.fail()
         self.kmwrite()
 
     def pre_delete(self):
@@ -729,7 +788,6 @@ class BaseHandler(RequestHandler):
         return True
 
     def delete(self, *args, **kwargs):
-        self.Print('%s fired' % inspect.stack()[0][3], Colors.GRAY)
         try:
             self.method = 'delete'
             self.module = self.request.uri.split('/')[2].split('?')[0]
@@ -740,26 +798,26 @@ class BaseHandler(RequestHandler):
                         results = col.update_one({'_id': ObjectId(self.params['id'])},
                                                      {'$set': {'deleted': True}}).raw_result
                         if results['nModified'] == 1:
-                            self.set_output('public_operations', 'successful')
+                            # self.set_output('public_operations', 'successful')
+                            self.success()
                         else:
                             self.set_output('public_operations', 'record_not_found')
                     else:
                         if self.conditions == {}:
                             self.conditions = {'_id': ObjectId(self.params['id'])}
+                        print(self.conditions)
                         results = col.remove(self.conditions)
                         if results['n'] == 1:
-                            self.set_output('public_operations', 'successful')
+                            # self.set_output('public_operations', 'successful')
+                            self.success()
                         else:
                             self.set_output('public_operations', 'record_not_found')
                     self.after_delete()
-            if consts.LOG_ACTIVE:
-                self.log_status(self.output)
         except:
             self.PrintException()
-            self.set_output('public_operations', 'failed')
+            # self.set_output('public_operations', 'failed')
+            self.fail()
         self.kmwrite()
-
-
 
     def after_delete(self):
         return True

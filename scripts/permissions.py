@@ -1,5 +1,6 @@
 from publics import db, set_db
-set_db('rest')
+from consts import consts
+set_db(consts.DB_NAME)
 
 col_users_roles = db()['users_roles']
 col_users_roles.drop()

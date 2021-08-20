@@ -1,4 +1,4 @@
-import sys
+import sys, os
 sys.path.append('/root/dev/app')
 db_name = 'db_name'
 
@@ -31,9 +31,14 @@ def es():
 
 
 def db():
-    from pymongo import MongoClient
-    con = MongoClient()
-    return con[db_name]
+    try:
+        from pymongo import MongoClient
+        MONGO_CONNECTION = os.getenv('MONGO')
+        con = MongoClient('mongodb://' + MONGO_CONNECTION)
+        return con[db_name]
+    except:
+        PrintException()
+    return None
 
 
 def load_messages():
@@ -71,39 +76,23 @@ def load_notifications():
     return notifications
 
 
-class consts:
-    import os
-    ROOT_DIR = os.path.dirname(os.path.abspath(__file__))
-    page_size = 20
-    MAX_TOKEN_DURATION = 1000000
-    MESSAGES = load_messages()
-    NOTIFICATIONS = load_notifications()
-    CONSOLE_LOG = True
-    LOG_ACTIVE = True
-    PDP_ROOT = '/var/www/html/miz/'
-    PDP_IMAGES = PDP_ROOT + 'images/'
-    SERVER_ADDRESS = 'https://server1.onmiz.org'
-    SERVER_PORT = '6000'
-    DB_NAME = 'db_name'
-    TEST_DB_NAME = 'tdb_name'
-    ODP_ROOT = SERVER_ADDRESS + '/app/'
-    LOG_SERVER = 'http://logs.onmiz.org:8080'
-    ODP_IMAGES = ODP_ROOT + 'images/'
-    TEST_MODE = False
+# def create_md5(str):
+#     import hashlib
+#     ps = hashlib.md5()
+#     ps.update(str)
+#     _hash = ps.hexdigest()
+#     ps = hashlib.sha1()
+#     ps.update(str)
+#     _hash += ps.hexdigest()[:18:-1]
+#     _hash = _hash[::-1]
+#     ps = hashlib.new('ripemd160')
+#     ps.update(_hash)
+#     return ps.hexdigest()[3:40]
 
 
-def create_md5(str):
-    import hashlib
-    ps = hashlib.md5()
-    ps.update(str)
-    _hash = ps.hexdigest()
-    ps = hashlib.sha1()
-    ps.update(str)
-    _hash += ps.hexdigest()[:18:-1]
-    _hash = _hash[::-1]
-    ps = hashlib.new('ripemd160')
-    ps.update(_hash)
-    return ps.hexdigest()[3:40]
+def create_md5(s, encoding='utf-8'):
+    from hashlib import md5
+    return md5(s.encode(encoding)).hexdigest()
 
 
 def encode_token(data):
@@ -126,11 +115,6 @@ def decode_token(token):
 def random_str(length):
     import random, string
     return ''.join(random.choice(string.lowercase) for i in range(length))
-
-
-def random_digits():
-    from random import randint
-    return str(randint(1000, 9999))
 
 
 def log_status(l):

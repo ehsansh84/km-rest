@@ -1,10 +1,13 @@
+import sys
+sys.path.append('/app')
 from publics import db, create_md5, set_db
-set_db('db_name')
+from consts import consts
+set_db(consts.DB_NAME)
 
 
 def insert_users():
     col_users = db()['users']
-    if col_users.count({'username': 'admin'}) == 0:
+    if col_users.count_documents({'username': 'admin'}) == 0:
         col_users.insert_one({
             'name': 'ehsan',
             'family': 'shirzadi',
