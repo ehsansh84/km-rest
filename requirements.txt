@@ -2,7 +2,7 @@ PyJWT==1.7.1
 pymongo==3.10.1
 #requests==2.22.0
 tornado==6.0.3
-urllib3==1.25.7
+urllib3==1.26.5
 psutil
 #openpyxl
 #pyfcm
