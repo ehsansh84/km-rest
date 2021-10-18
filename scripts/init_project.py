@@ -115,8 +115,8 @@ def insert_messages():
         {
             'group': 'public_operations',
             'name': 'successful',
-            'code': 401,
-            'status': False,
+            'code': 200,
+            'status': True,
             'en': 'Operation successful'
         },
         {
@@ -150,8 +150,8 @@ def insert_messages():
         {
             'group': 'user',
             'name': 'logged_in',
-            'code': 401,
-            'status': False,
+            'code': 200,
+            'status': True,
             'en': 'Logged in'
         }
     ])
