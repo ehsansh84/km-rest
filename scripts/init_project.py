@@ -141,6 +141,13 @@ def insert_messages():
             'en': 'ID format is not correct'
         },
         {
+            'group': 'field_error',
+            'name': 'file_type',
+            'code': 401,
+            'status': False,
+            'en': 'Type of file need to be specified in "type"'
+        },
+        {
             'group': 'user',
             'name': 'login_failed',
             'code': 401,
