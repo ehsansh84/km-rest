@@ -1,3 +1,5 @@
+import sys
+sys.path.append('/app')
 from publics import db, set_db
 from consts import consts
 set_db(consts.DB_NAME)
