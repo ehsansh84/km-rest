@@ -3,7 +3,8 @@ from copy import deepcopy
 from datetime import datetime
 from base_handler import BaseHandler
 from data_templates import output
-from publics import consts, create_md5, PrintException
+from publics import create_md5, PrintException
+from consts import consts
 
 
 class Upload(BaseHandler):
