@@ -1,0 +1,142 @@
+[
+        {
+            "group": "user",
+            "name": "token_not_received",
+            "code": 401,
+            "status": false,
+            "en": "Token not received"
+        },
+        {
+            "group": "user",
+            "name": "token_validated",
+            "code": 200,
+            "status": true,
+            "en": "Token validated"
+        },
+        {
+            "group": "user",
+            "name": "user_not_exists",
+            "code": 401,
+            "status": false,
+            "en": "User not exists"
+        },
+        {
+            "group": "user",
+            "name": "token_expired",
+            "code": 401,
+            "status": false,
+            "en": ""
+        },
+        {
+            "group": "user",
+            "name": "access_denied",
+            "code": 401,
+            "status": false,
+            "en": "Access denied"
+        },
+        {
+            "group": "user",
+            "name": "permission_not_defined",
+            "code": 401,
+            "status": false,
+            "en": "Permission not defined"
+        },
+        {
+            "group": "user",
+            "name": "method_not_specified",
+            "code": 401,
+            "status": false,
+            "en": "Method not specified"
+        },
+        {
+            "group": "user",
+            "name": "access_granted",
+            "code": 200,
+            "status": true,
+            "en": "Access granted"
+        },
+        {
+            "group": "public_operations",
+            "name": "params_loaded",
+            "code": 200,
+            "status": true,
+            "en": "Params loaded"
+        },
+        {
+            "group": "public_operations",
+            "name": "params_not_loaded",
+            "code": 401,
+            "status": false,
+            "en": "Params not loaded"
+        },
+        {
+            "group": "public_operations",
+            "name": "page_limit",
+            "code": 401,
+            "status": false,
+            "en": "Page limit reached"
+        },
+        {
+            "group": "public_operations",
+            "name": "record_not_found",
+            "code": 401,
+            "status": false,
+            "en": "Record not found"
+        },
+        {
+            "group": "public_operations",
+            "name": "failed",
+            "code": 401,
+            "status": false,
+            "en": "Operation failed"
+        },
+        {
+            "group": "public_operations",
+            "name": "successful",
+            "code": 200,
+            "status": true,
+            "en": "Operation successful"
+        },
+        {
+            "group": "field_error",
+            "name": "required",
+            "code": 401,
+            "status": false,
+            "en": "Field %s required"
+        },
+        {
+            "group": "field_error",
+            "name": "null",
+            "code": 401,
+            "status": false,
+            "en": "Null not allowed"
+        },
+        {
+            "group": "field_error",
+            "name": "id_format",
+            "code": 401,
+            "status": false,
+            "en": "ID format is not correct"
+        },
+        {
+            "group": "field_error",
+            "name": "file_type",
+            "code": 401,
+            "status": false,
+            "en": "Type of file need to be specified in 'type'"
+        },
+        {
+            "group": "user",
+            "name": "login_failed",
+            "code": 401,
+            "status": false,
+            "en": "Login information is not correct"
+        },
+        {
+            "group": "user",
+            "name": "logged_in",
+            "code": 200,
+            "status": true,
+            "en": "Logged in"
+        }
+    ]
