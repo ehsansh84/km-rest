@@ -19,9 +19,7 @@ if __name__ == "__main__":
     tornado.options.parse_command_line()
     app = tornado.web.Application(url_patterns)
     https_app = tornado.httpserver.HTTPServer(app)
-    print('YES')
     if os.getenv('MONGO'):
-        print('NO')
         consts.MESSAGES = load_messages()
         consts.NOTIFICATIONS = load_notifications()
         app.listen(int(consts.SERVER_PORT))
