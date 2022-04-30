@@ -56,9 +56,9 @@ def db():
 def load_messages():
     messages = {}
     try:
-        set_db(db_name)
-        col_server_messages = db()['server_messages']
-        for item in col_server_messages.find():
+        import json
+        f = open('strings/messages.json', 'r')
+        for item in json.loads(f.read()):
             group = item['group']
             name = item['name']
             if group not in messages: messages[group] = {}
@@ -70,22 +70,22 @@ def load_messages():
     return messages
 
 
-def load_notifications():
-    notifications = {}
-    try:
-        set_db(db_name)
-        col_server_notifications = db()['server_notifications']
-        for item in col_server_notifications.find():
-            group = item['group']
-            name = item['name']
-            if group not in notifications: notifications[group] = {}
-            del item['_id']
-            del item['group']
-            del item['name']
-            notifications[group][name] = item
-    except:
-        PrintException()
-    return notifications
+# def load_notifications():
+#     notifications = {}
+#     try:
+#         set_db(db_name)
+#         col_server_notifications = db()['server_notifications']
+#         for item in col_server_notifications.find():
+#             group = item['group']
+#             name = item['name']
+#             if group not in notifications: notifications[group] = {}
+#             del item['_id']
+#             del item['group']
+#             del item['name']
+#             notifications[group][name] = item
+#     except:
+#         PrintException()
+#     return notifications
 
 
 # def create_md5(str):

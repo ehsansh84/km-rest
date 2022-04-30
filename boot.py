@@ -21,7 +21,7 @@ if __name__ == "__main__":
     https_app = tornado.httpserver.HTTPServer(app)
     if os.getenv('MONGO'):
         consts.MESSAGES = load_messages()
-        consts.NOTIFICATIONS = load_notifications()
+        # consts.NOTIFICATIONS = load_notifications()
         app.listen(int(consts.SERVER_PORT))
         tornado.ioloop.IOLoop.current().start()
     else:
