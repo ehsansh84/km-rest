@@ -1,4 +1,4 @@
-PyJWT==1.7.1
+PyJWT==2.4.0
 pymongo==3.10.1
 tornado==6.0.3
 colorlog
