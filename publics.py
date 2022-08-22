@@ -70,38 +70,6 @@ def load_messages():
     return messages
 
 
-# def load_notifications():
-#     notifications = {}
-#     try:
-#         set_db(db_name)
-#         col_server_notifications = db()['server_notifications']
-#         for item in col_server_notifications.find():
-#             group = item['group']
-#             name = item['name']
-#             if group not in notifications: notifications[group] = {}
-#             del item['_id']
-#             del item['group']
-#             del item['name']
-#             notifications[group][name] = item
-#     except:
-#         PrintException()
-#     return notifications
-
-
-# def create_md5(str):
-#     import hashlib
-#     ps = hashlib.md5()
-#     ps.update(str)
-#     _hash = ps.hexdigest()
-#     ps = hashlib.sha1()
-#     ps.update(str)
-#     _hash += ps.hexdigest()[:18:-1]
-#     _hash = _hash[::-1]
-#     ps = hashlib.new('ripemd160')
-#     ps.update(_hash)
-#     return ps.hexdigest()[3:40]
-
-
 def create_md5(s, encoding='utf-8'):
     from hashlib import md5
     return md5(s.encode(encoding)).hexdigest()
