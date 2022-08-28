@@ -253,7 +253,7 @@ class BaseHandler(RequestHandler):
             else:
                 self.inputs['delete'] = ['id', 'conditions']
             if 'conditions' in self.params:
-                temp_conditions = self.params['conditions']
+                temp_conditions = json.loads(self.params['conditions'])
                 del self.params['conditions']
                 for k, v in temp_conditions.items():
                     if v in [None, 'null']:
