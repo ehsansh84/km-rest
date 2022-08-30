@@ -231,8 +231,9 @@ class BaseHandler(RequestHandler):
                     self.sort = json.loads(self.params['sort'])
                     del self.params['sort']
             elif self.request.method in ['POST', 'PUT', 'DELETE']:
-                self.params = json.loads(self.request.body)
-                self.original_params = deepcopy(self.params)
+                if self.request.body != b'':
+                    self.params = json.loads(self.request.body)
+                    self.original_params = deepcopy(self.params)
             if 'locale' in self.params:
                 self.locale = self.params['locale']
                 del self.params['locale']
