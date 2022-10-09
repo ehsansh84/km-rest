@@ -1,10 +1,42 @@
+'''
+Since KM2: change log :
+1- add allow_action to prevent action in some conditions
+2- self.output created to access through all methods
+3- some edit in after_get and after_get_one for dates
+4- fix a bug in method_access_control
+5- Add auto fields to ban these kind of fields from being added or updated
+6- Backward compatiblity: quick_search removed
+7- Logs date bug fixed
+8- Original params added to logs, useless params removed
+9- If not allow action post is not performed
+10- allow_action added to get method
+11- Check for unknow fields in post method
+12- fix doc limit error
+13- Messages read from database
+14- Standard base handler can be used for tokenless base handler
+15- Multilingual for all fields have implemented
+16- Http output has been set as an standard output
+17- Print exception added here
+18- Put can be done based on conditions
+19- fixed Tokenless bug in put
+20- after_load_params added
+21- set_output returns error if message not found
+22- Delete uses allow_action
+23- Logical delete added
+24- prepare_dataset added
+25- Python 3
+26- .success and .fail added
+27- not token is guest now
+28- delete now uses /id
+29- update now uses /id
+'''
 import json
 from copy import deepcopy
 from datetime import datetime, timedelta
 from bson import ObjectId
 from tornado.web import RequestHandler
 from data_templates import output, log_template
-from publics import db, decode_token
+from publics import db, decode_token, ExceptionLine
 from consts import consts
 from log_tools import log
 
@@ -17,7 +49,6 @@ Colors = __enum(BLACK=0, RED=1, LIME=2, YEOOLW=3, BLUE=4, PINK=5, CYAN=6, GRAY=7
 
 
 class BaseHandler(RequestHandler):
-
     def initialize(self):
         self.db = db()
         self.permissions = None
@@ -39,7 +70,6 @@ class BaseHandler(RequestHandler):
         self.url = ''
         self.token = None
         self.locale = 'en'
-        self.method = ''
         self.app_version = 0
         self.document_count = 0
         self.added_data = {}
@@ -66,7 +96,7 @@ class BaseHandler(RequestHandler):
         self.set_header("Access-Control-Allow-Credentials", True)
         self.set_header("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept")
         self.set_header("Access-Control-Allow-Headers", "content-type")
-        self.set_header("Access-Control-Allow-Methods", "GET,HEAD,PUT,PATCH,POST,DELETE")
+        self.set_header("Access-Control-Allow-Methods", "GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS")
         self.set_header("Access-Control-Allow-Origin", "*")
 
     def options(self, *args, **kwargs):
@@ -89,16 +119,29 @@ class BaseHandler(RequestHandler):
                     'note': self.note,
                 })
         except Exception as e:
-            log.error(f'Error {str(e)}')
+            log.error(f'Error {str(e)}, => {ExceptionLine()}')
+            log.debug(group, id)
             self.status = False
             self.set_status(401)
             self.note = 'Server message not found: %s/%s' % (group, id)
+
+    def __json_handler(self, json):
+        import bson.objectid
+        if isinstance(json, datetime):
+            return json.isoformat()
+        elif isinstance(json, bson.objectid.ObjectId):
+            return str(json)
+        else:
+            raise TypeError(json)
 
     def kmwrite(self):
         self.output.update({'note': self.note})
         # self.Print(self.note, Colors.LIME)
         try:
-            self.write(self.output)
+            if self.status_code != 200:
+                log.info(self.note)
+            # self.write(json.dumps(self.output, default=self.__json_handler))
+            self.write(json.loads(json.dumps(self.output, default=self.__json_handler)))
             if consts.LOG_ACTIVE:
                 self.log_status()
         except Exception as e:
@@ -114,15 +157,15 @@ class BaseHandler(RequestHandler):
 
     def log_status(self):
         col = db()['logs']
-        log = deepcopy(log_template)
+        log_doc = deepcopy(log_template)
         doc = deepcopy(self.params)
         for item in self.casting['dates']:
             if item in doc.keys():
                 doc[item] = str(doc[item])
-                print('X-Real-ip')
-                print(self.request.remote_ip)
 
-        log.update({
+                log.info(f'X-Real-ip is {self.request.remote_ip}')
+
+        log_doc.update({
             'project': 'miz',
             'ip': self.request.headers['X-Real-IP'] if 'X-Real-IP' in self.request.headers else self.request.remote_ip,
             'duration': (datetime.now() - self.start_time).total_seconds() * 1000,
@@ -141,9 +184,9 @@ class BaseHandler(RequestHandler):
             'url': self.request.uri,
         })
         try:
-            col.insert(log, check_keys=False)
+            col.insert(log_doc, check_keys=False)
         except Exception as e:
-            log.error(f'Error {str(e)}')
+            log.error(f'Error {str(e)}, => {ExceptionLine()}')
 
     def init_method(self):
         pass
@@ -168,7 +211,7 @@ class BaseHandler(RequestHandler):
                                 self.app_version = int(token_info['app_version'].replace('.', ''))
                         self.set_output('user', 'token_validated')
         except Exception as e:
-            log.error(f'Error {str(e)}')
+            log.error(f'Error {str(e)}, => {ExceptionLine()}')
             return False
         return self.status
 
@@ -200,7 +243,7 @@ class BaseHandler(RequestHandler):
                         temp = temp.replace('@', '$')
                         self.permissions = json.loads(temp)
         except Exception as e:
-            log.error(f'Error {str(e)}')
+            log.error(f'Error {str(e)}, => {ExceptionLine()}')
             self.fail()
         return self.status
 
@@ -215,13 +258,14 @@ class BaseHandler(RequestHandler):
                 else:
                     self.set_output('user', 'access_denied')
         except Exception as e:
-            log.error(f'Failed {str(e)}')
+            log.error(f'Error {str(e)}, => {ExceptionLine()}')
             self.fail()
         return self.status
 
     def load_params(self):
         try:
             if self.request.method == 'GET':
+                log.debug(self.request.arguments)
                 self.params = {k: self.get_argument(k) for k in self.request.arguments}
                 self.original_params = deepcopy(self.params)
                 if 'fields' in self.params:
@@ -231,9 +275,10 @@ class BaseHandler(RequestHandler):
                     self.sort = json.loads(self.params['sort'])
                     del self.params['sort']
             elif self.request.method in ['POST', 'PUT', 'DELETE']:
-                if self.request.body != b'':
-                    self.params = json.loads(self.request.body)
-                    self.original_params = deepcopy(self.params)
+                log.debug(self.request.body)
+                params = {} if self.request.body == b"" else json.loads(self.request.body)
+                self.params = params
+                self.original_params = deepcopy(params)
             if 'locale' in self.params:
                 self.locale = self.params['locale']
                 del self.params['locale']
@@ -255,6 +300,7 @@ class BaseHandler(RequestHandler):
                 self.inputs['delete'] = ['id', 'conditions']
             if 'conditions' in self.params:
                 temp_conditions = json.loads(self.params['conditions'])
+                log.debug(temp_conditions)
                 del self.params['conditions']
                 for k, v in temp_conditions.items():
                     if v in [None, 'null']:
@@ -273,7 +319,7 @@ class BaseHandler(RequestHandler):
                 self.params = params
             self.set_output('public_operations', 'params_loaded')
         except Exception as e:
-            log.error(f'Error {str(e)}')
+            log.error(f'Error {str(e)}, => {ExceptionLine()}')
             self.set_output('public_operations', 'params_not_loaded')
             return False
         self.after_load_params()
@@ -284,37 +330,39 @@ class BaseHandler(RequestHandler):
 
     def get_validation_check(self):
         try:
-            if 'get' in self.required:
-                for item in self.required[self.method]:
+            if self.request.method in self.required:
+                for item in self.required[self.request.method]:
                     if item not in self.params.keys():
                         self.set_output('field_error', 'required', item)
                         return False
         except:
-            self.PrintException()
+            ExceptionLine()
             return False
         return True
 
     def post_validation_check(self):
         try:
-            if 'post' in self.required:
-                for item in self.required[self.method]:
+            if self.request.method in self.required:
+                for item in self.required[self.request.method]:
                     if item not in self.params.keys():
                         self.set_output('field_error', 'required', item)
                         return False
         except Exception as e:
-            log.error(f'Error {str(e)}')
+            log.error(f'Error {str(e)}, => {ExceptionLine()}')
             return False
         return True
 
     def put_validation_check(self):
         try:
-            if 'put' in self.required:
-                for item in self.required[self.method]:
+            if self.request.method in self.required:
+                log.debug(self.request.method)
+                log.debug(self.required)
+                for item in self.required[self.request.method]:
                     if item not in self.params.keys():
                         self.set_output('field_error', 'required', item)
                         return False
         except Exception as e:
-            log.error(f'Error {str(e)}')
+            log.error(f'Error {str(e)}, => {ExceptionLine()}')
             return False
         return True
 
@@ -338,10 +386,13 @@ class BaseHandler(RequestHandler):
                 elif item in self.casting['dics']:
                     if self.request.method == 'GET':
                         self.params[item] = json.loads(self.params[item])
+                elif item in self.casting['lists']:
+                    if self.request.method == 'GET':
+                        self.params[item] = json.loads(self.params[item])
                 elif item in self.casting['floats']:
                     self.params[item] = float(self.params[item])
         except Exception as e:
-            log.error(f'Error {str(e)}')
+            log.error(f'Error {str(e)}, => {ExceptionLine()}')
             self.set_output('field_error', 'casting', item)
             return False
         return True
@@ -392,7 +443,7 @@ class BaseHandler(RequestHandler):
                                 self.add_user_data()
                             return self.before_get()
         except Exception as e:
-            log.error(f'Error {str(e)}')
+            log.error(f'Error {str(e)}, => {ExceptionLine()}')
             self.fail()
         return False
 
@@ -402,12 +453,12 @@ class BaseHandler(RequestHandler):
                 if item not in self.params:
                     self.params[item] = self.casting['defaults'][item]
             except Exception as e:
-                log.error(f'Error {str(e)}')
+                log.error(f'Error {str(e)}, => {ExceptionLine()}')
 
     def add_user_data(self):
         try:
             if self.request.method in ['GET']:
-                self.conditions.update(self.permissions[self.method])
+                self.conditions.update(self.permissions[self.request.method])
                 if 'doc_limit' in self.permissions: self.doc_limit = self.permissions['doc_limit']
             elif self.request.method == 'POST':
                 for item in self.params.keys():
@@ -424,7 +475,7 @@ class BaseHandler(RequestHandler):
                 self.params = temp_params
                 self.params.update(self.permissions[self.request.method]['set'])
         except Exception as e:
-            log.error(f'Error {str(e)}')
+            log.error(f'Error {str(e)}, => {ExceptionLine()}')
 
     def prepare_item(self, document):
         try:
@@ -432,9 +483,9 @@ class BaseHandler(RequestHandler):
                 document['id'] = str(document['_id'])
                 del document['_id']
             for k, v in document.items():
-                if 'dates' in self.casting:
-                    if k in self.casting['dates']:
-                        document[k] = str(v)
+                # if 'dates' in self.casting:
+                #     if k in self.casting['dates']:
+                #         document[k] = str(v)
                 if 'multilingual' != []:
                     if k in self.multilingual:
                         if self.locale in document[k]:
@@ -442,7 +493,7 @@ class BaseHandler(RequestHandler):
                         else:
                             document[k] = consts.MESSAGES['field_error']['language_not_defined'][self.locale]
         except Exception as e:
-            log.error(f'Error {str(e)}')
+            log.error(f'Error {str(e)}, => {ExceptionLine()}')
         return document
 
     def prepare_dataset(self, dataset):
@@ -464,7 +515,7 @@ class BaseHandler(RequestHandler):
                                 document[k] = consts.MESSAGES['field_error']['language_not_defined'][self.locale]
                 data_list.append(document)
         except Exception as e:
-            log.error(f'Error {str(e)}')
+            log.error(f'Error {str(e)}, => {ExceptionLine()}')
         return data_list
 
     def after_get(self, dataset):
@@ -473,7 +524,7 @@ class BaseHandler(RequestHandler):
             for item in dataset:
                 temp.append(self.prepare_item(item))
         except Exception as e:
-            log.error(f'Error {str(e)}')
+            log.error(f'Error {str(e)}, => {ExceptionLine()}')
         return temp
 
     def after_get_one(self, document):
@@ -481,7 +532,6 @@ class BaseHandler(RequestHandler):
 
     def get(self, id=None, *args, **kwargs):
         try:
-            self.method = 'get'
             self.id = id
             if self.pre_get():
                 # TODO: Remove this code after some time, only for null values sent by retards
@@ -542,7 +592,8 @@ class BaseHandler(RequestHandler):
                                     self.success()
                             except:
                                 self.set_output('field_error', 'id_format')
-        except:
+        except Exception as e:
+            log.error(f'Error {str(e)}, => {ExceptionLine()}')
             self.fail()
         self.kmwrite()
 
@@ -562,26 +613,36 @@ class BaseHandler(RequestHandler):
                         self.output['data']['item']['id'] = str(self.id)
                         self.success()
                     self.after_post()
-        except:
+        except Exception as e:
+            log.error(f'Error {str(e)}, => {ExceptionLine()}')
             self.fail()
         self.kmwrite()
 
     def http_init(self, id):
-        self.module = self.request.uri.split('/')[2].split('?')[0]
-        #TODO: check for id format
-        if id is not None:
-            self.id = ObjectId(id)
-        self.init_method()
-        if not self.load_params():
-            return False
-        log.debug('Params loaded')
-        self.data_casting()
-        log.debug('Data casted')
-        if not self.tokenless:
-            log.debug("It's not tokenless")
-            if not (self.token_validation() and self.load_permissions() and self.method_access_control() and self.add_user_data()):
+        try:
+            self.module = self.request.uri.split('/')[2].split('?')[0]
+            # TODO: check for id format
+            if id is not None:
+                try:
+                    self.id = ObjectId(id)
+                except:
+                    log.warn('ID is not an standard mongodb ObjectId')
+                    self.id = id
+            self.init_method()
+            if not self.load_params():
                 return False
-        return True
+            log.debug('Params loaded')
+            self.data_casting()
+            log.debug('Data casted')
+            if not self.tokenless:
+                log.debug("It's not tokenless")
+                if not (
+                        self.token_validation() and self.load_permissions() and self.method_access_control() and self.add_user_data()):
+                    return False
+            return True
+        except:
+            log.error(f'An error occurred! {ExceptionLine()}')
+            return False
 
     def put(self,id=None, *args, **kwargs):
         try:
@@ -626,7 +687,8 @@ class BaseHandler(RequestHandler):
             else:
                 log.error('An error happend in pre_put level!')
             self.after_put()
-        except:
+        except Exception as e:
+            log.error(f'Error {str(e)}, => {ExceptionLine()}')
             self.fail()
         self.kmwrite()
 
@@ -670,7 +732,8 @@ class BaseHandler(RequestHandler):
                                 else:
                                     self.set_output('public_operations', 'record_not_found')
                         self.after_delete()
-        except:
+        except Exception as e:
+            log.error(f'Error {str(e)}, => {ExceptionLine()}')
             self.fail()
         self.kmwrite()
 
@@ -694,3 +757,11 @@ class BaseHandler(RequestHandler):
 
     def before_get(self):
         return True
+
+    def get_object(self):
+        try:
+            col = db()[self.module]
+            result = col.find_one({'_id': ObjectId(self.id)})
+            return result
+        except:
+            log.error(f'An error happened: {ExceptionLine()}')
